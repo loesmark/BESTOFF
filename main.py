@@ -9,7 +9,6 @@ from telegram.ext import (
     MessageHandler,
     filters
 )
-import requests
 import sqlite3
 
 
@@ -22,7 +21,7 @@ logger = logging.getLogger(__name__)
 START_ROUTES, PUBG_ROUTE, FREEFIRE_ROUTE, JOWAKER_ROUTE, BIGOLIVE_ROUTE, START_ROUTES_HUB, submit_W_route, charge_route = range(8)
 
 ONE, TWO, THREE, FOUR  = range(4)
-BOT_TOKEN = "5898873453:AAGaaVR-P9VaCuYjqdGO3RSOzb2ATtr8C9A"
+
 connection_obj = sqlite3.connect('geek.db')
 cursor_obj = connection_obj.cursor()
 
@@ -298,9 +297,16 @@ def main() -> None:
 
     # Add ConversationHandler to application that will be used for handling updates
     application.add_handler(conv_handler)
+
     # Run the bot until the user presses Ctrl-C
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
+
+
 if __name__ == "__main__":
     main()
+
+
+
+
