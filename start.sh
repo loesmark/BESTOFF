@@ -1,5 +1,5 @@
 #!/bin/bash
-python bot1.py &
-python bot2.py &
-python bot3.py &
+python HUB.py &
+python main.py &
+python emploe.py &
 wait
