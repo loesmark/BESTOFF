@@ -11,7 +11,10 @@ from telegram.ext import (
 )
 import requests
 import sqlite3
+import os
 
+token = os.getenv('bot_token_1')
+token_2 = os.getenv('bot_token_2')
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -21,8 +24,6 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 START_ROUTES, SPICIFIC_MESSAGE_ROUTE, charge_ROUTE2, charge_ROUTE, SPICIFIC_MESSAGE_ROUTE2 = range(5)
 ONE, TWO = range(2)
-BOT_TOKEN = "7411899807:AAFkj7LY7r-16w1LDX9WwRxMFFqlWEyvttY"
-
 connection_obj = sqlite3.connect('geek.db')
 cursor_obj = connection_obj.cursor()
 
@@ -81,18 +82,22 @@ async def spicefick_message_id(update: Update, context: ContextTypes.DEFAULT_TYP
 async def spicefick_message_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     id = update.message.text
     message = context.user_data.get("message")
-    URL = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'
+    URL = f'https://api.telegram.org/bot{token_2}/sendMessage'
     payload = {
         'chat_id': str(id),
         'text': message
     }
-    # إرسال الطلب إلى API
-    response = requests.post(URL, data=payload)
-    # التحقق من نجاح الطلب
-    if response.status_code == 200:
+
+    try:
+        response = requests.post(URL, data=payload)
+        response.raise_for_status()  # Raises an HTTPError for bad responses
         await update.message.reply_text("تم اعلام الزبون بنجاح /start")
-    else:
-        await update.message.reply_text("حدث خطاء اعد المحاولة /start")
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"HTTP error occurred: {e}")
+        await update.message.reply_text("Failed to notify the user. Please check the user ID and try again.")
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        await update.message.reply_text("An unexpected error occurred while notifying the user.")
 
     return SPICIFIC_MESSAGE_ROUTE2
 
@@ -118,55 +123,61 @@ async def charge_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     id = update.message.text
     user = update.message.from_user
     charge = context.user_data.get("message")
-    my_balance = cursor_obj.execute(f"SELECT BALANCE FROM USER_HUB WHERE USER_ID = {int(user.id)};").fetchone()
-    user_bal = cursor_obj.execute(f"SELECT BALANCE FROM users WHERE USER_ID = {int(id)};").fetchone()
-    if float(charge) <= float(my_balance[0]):
-        try:
-            balnce = float(user_bal[0]) + float(charge)
-            my_balance = float(my_balance[0]) - float(charge)
-            cursor_obj.execute(f"UPDATE USER_HUB SET BALANCE = {float(my_balance)} WHERE USER_ID = {int(user.id)};")
-            connection_obj.commit()
-        except:
-            await update.message.reply_text("erorr /start")
+
+    try:
+        my_balance = cursor_obj.execute(f"SELECT BALANCE FROM USER_HUB WHERE USER_ID = {int(user.id)};").fetchone()
+        user_bal = cursor_obj.execute(f"SELECT BALANCE FROM users WHERE USER_ID = {int(id)};").fetchone()
+
+        if my_balance is None or user_bal is None:
+            await update.message.reply_text("User balance not found. Please try again.")
             return START_ROUTES
 
-        cursor_obj.execute(f"UPDATE users SET BALANCE = {int(balnce)} WHERE USER_ID = {int(id)};")
-        updated_rows = cursor_obj.rowcount
-        if updated_rows == 1:
+        if float(charge) <= float(my_balance[0]):
+            balnce = float(user_bal[0]) + float(charge)
+            my_balance = float(my_balance[0]) - float(charge)
+
+            cursor_obj.execute(f"UPDATE USER_HUB SET BALANCE = {float(my_balance)} WHERE USER_ID = {int(user.id)};")
             connection_obj.commit()
-            await update.message.reply_text("تم شحن الزبون بنجاح /start")
-            URL = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'
-            payload = {
-                'chat_id': str(id),
-                'text': f"تم اضافة مبلغ {charge} الى رصيدك واصبح {balnce}"
-            }
-            # إرسال الطلب إلى API
-            response = requests.post(URL, data=payload)
-            # التحقق من نجاح الطلب
-            if response.status_code == 200:
-                await update.message.reply_text("تم اعلام الزبون بنجاح /start")
+
+            cursor_obj.execute(f"UPDATE users SET BALANCE = {float(balnce)} WHERE USER_ID = {int(id)};")
+            updated_rows = cursor_obj.rowcount
+
+            if updated_rows == 1:
+                connection_obj.commit()
+                await update.message.reply_text("تم شحن الزبون بنجاح /start")
+                URL = f'https://api.telegram.org/bot{token_2}/sendMessage'
+                payload = {
+                    'chat_id': str(id),
+                    'text': f"تم اضافة مبلغ {charge} الى رصيدك واصبح {balnce}"
+                }
+                # إرسال الطلب إلى API
+                response = requests.post(URL, data=payload)
+                # التحقق من نجاح الطلب
+                if response.status_code == 200:
+                    await update.message.reply_text("تم اعلام الزبون بنجاح /start")
+                else:
+                    await update.message.reply_text("حدث خطأ اثناء اعلام الزبون /start")
             else:
-                await update.message.reply_text("حدث خطأ اثناء اعلام الزبون /start")
+                await update.message.reply_text("حدث خطأ اعد المحاولة /start")
         else:
-            await update.message.reply_text("حدث خطأ اعد المحاولة /start")
+            await update.message.reply_text(f'''رصيدك لا يكفي لعملية الشحن ان رصيدك هو 
+            {my_balance[0]}
+            الكمية المراد شحنها هي
+            {charge}''')
 
-    else:
-        await update.message.reply_text(f'''رصيدك لا يكفي لعملية الشحن ان رصيدك هو 
-    {my_balance[0]}
-الكمية المراد شحنها هي
-{charge}''')
-
+    except sqlite3.Error as e:
+        logger.error(f"Database error: {e}")
+        await update.message.reply_text("Database error occurred. Please try again later.")
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        await update.message.reply_text("An unexpected error occurred. Please try again later.")
 
     return START_ROUTES
 
 
 
-
-
-
-
 def main() -> None:
-    application = Application.builder().token("5898873453:AAGaaVR-P9VaCuYjqdGO3RSOzb2ATtr8C9A").build()
+    application = Application.builder().token(token).build()
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={

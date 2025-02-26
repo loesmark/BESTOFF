@@ -10,6 +10,9 @@ from telegram.ext import (
     filters
 )
 import sqlite3
+import os
+
+token = os.getenv('bot_token')
 
 
 logging.basicConfig(
@@ -29,28 +32,38 @@ cursor_obj = connection_obj.cursor()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Send message on `/start`."""
     user = update.message.from_user
-    x = cursor_obj.execute(f"SELECT BALANCE FROM users WHERE USER_ID = {user.id}").fetchone()
-    if x is None:
-        button = cursor_obj.execute("SELECT USER_NAME FROM USER_HUB").fetchall()
-        keyboard = [[InlineKeyboardButton("مخصص", callback_data=str(FOUR))]]
-        for button_name in button:
-            button = InlineKeyboardButton(button_name[0], callback_data=button_name[0])
-            keyboard.append([button])
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        # Send message with text and appended InlineKeyboard
-        await update.message.reply_text("الرجاء اختيار الموزع", reply_markup=reply_markup)
-        return START_ROUTES_HUB
-    else:
-        button = cursor_obj.execute("SELECT BUTTON_NAME FROM BUTTON WHERE BUTTON_TYPE = 'main' and STATE = 1").fetchall()
-        keyboard = [[InlineKeyboardButton("مخصص", callback_data=str(FOUR)),InlineKeyboardButton("شحن رصيد", callback_data=str(ONE))]]
-        for button_name in button:
-            button = InlineKeyboardButton(button_name[0], callback_data=button_name[0])
-            keyboard.append([button])
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        # Send message with text and appended InlineKeyboard
-        await update.message.reply_text(f"القائمة الرئيسية رصيدك = {x[0]}", reply_markup=reply_markup)
-        return START_ROUTES
+    try:
+        x = cursor_obj.execute(f"SELECT BALANCE FROM users WHERE USER_ID = {user.id}").fetchone()
 
+        await context.bot.send_message(chat_id='-1002364237348', text=f'''مستخدم جديد 
+                   first name: {user.first_name}
+                   username: {user.username}
+                   user_id: {user.id}''')
+
+        if x is None:
+            button = cursor_obj.execute("SELECT USER_NAME FROM USER_HUB").fetchall()
+            keyboard = [[InlineKeyboardButton("مخصص", callback_data=str(FOUR))]]
+            for button_name in button:
+                button = InlineKeyboardButton(button_name[0], callback_data=button_name[0])
+                keyboard.append([button])
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text("الرجاء اختيار الموزع", reply_markup=reply_markup)
+            return START_ROUTES_HUB
+        else:
+            button = cursor_obj.execute(
+                "SELECT BUTTON_NAME FROM BUTTON WHERE BUTTON_TYPE = 'main' and STATE = 1").fetchall()
+            keyboard = [[InlineKeyboardButton("مخصص", callback_data=str(FOUR))]]
+            for button_name in button:
+                button = InlineKeyboardButton(button_name[0], callback_data=button_name[0])
+                keyboard.append([button])
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(f"القائمة الرئيسية رصيدك = {x[0]}", reply_markup=reply_markup)
+            return START_ROUTES
+
+    except Exception as e:
+        logger.error(f"An error occurred: {e}")
+        await update.message.reply_text("An error occurred while processing your request. Please try again later.")
+        return -1  # Indicate an error state
 
 
 
@@ -62,7 +75,7 @@ async def start_over(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     x = cursor_obj.execute(f"SELECT BALANCE FROM users WHERE USER_ID = {int(querye)}").fetchone()
     await query.answer()
     button = cursor_obj.execute("SELECT BUTTON_NAME FROM BUTTON WHERE BUTTON_TYPE = 'main' and STATE = 1").fetchall()
-    keyboard = [[InlineKeyboardButton("مخصص", callback_data=str(FOUR)),InlineKeyboardButton("شحن رصيد", callback_data=str(ONE))]]
+    keyboard = [[InlineKeyboardButton("مخصص", callback_data=str(FOUR))]]
     for button_name in button:
         button = InlineKeyboardButton(button_name[0], callback_data=button_name[0])
         keyboard.append([button])
@@ -144,13 +157,26 @@ async def BIGOLIVE(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 async def no_hub(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Prompt same text & keyboard as `start` does but not as new message"""
-    user = update.message.from_user
+    user = update.effective_user
     logger.info("User %s started the conversation.", user.first_name)
-    cursor_obj.execute(
-        f'''INSERT INTO users(USER_NAME, First_Name, USER_ID, BALANCE, HUB) 
-            VALUES ('{str(user.username)}',' {str(user.first_name)}', {user.id}, 0,'null')''')
-    connection_obj.commit()
-    await update.message.reply_text(text="/start ")
+
+    try:
+        # Database operation
+        cursor_obj.execute(
+            f'''INSERT INTO users(USER_NAME, First_Name, USER_ID, BALANCE, HUB) 
+                VALUES ({user.username},{user.first_name}, {user.id}, 0, 'null')'''
+        )
+        connection_obj.commit()
+        # Sending a message to the user
+        await update.message.reply_text(text="/start ")
+
+    except sqlite3.Error as db_error:
+        logger.error("Database error occurred: %s", db_error)
+        await update.message.reply_text(text="An error occurred while accessing the database. Please try again later.")
+
+    except Exception as e:
+        logger.error("An unexpected error occurred: %s", e)
+        await update.message.reply_text(text="An unexpected error occurred. Please try again later.")
 
 
 
@@ -158,49 +184,71 @@ async def hub_fun(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Prompt same text & keyboard as `start` does but not as new message"""
     user = update.message.from_user
     query = update.callback_query
-    logger.info("User %s started the conversation.", user.first_name)
-    cursor_obj.execute(
-        f'''INSERT INTO users(USER_NAME, First_Name, USER_ID, BALANCE, HUB) 
-        VALUES ('{str(user.username)}',' {str(user.first_name)}', {user.id}, 0, '{query.data}')''')
-    connection_obj.commit()
-    await query.answer()
-    # Instead of sending a new message, edit the message that
-    # originated the CallbackQuery. This gives the feeling of an
-    # interactive menu.
-    await query.edit_message_text(text="/start ")
+    try:
+        # Database operation
+        cursor_obj.execute(
+            f'''INSERT INTO users(USER_NAME, First_Name, USER_ID, BALANCE, HUB) 
+                VALUES ('{str(user.username)}',' {str(user.first_name)}', {user.id}, 0, '{query.data}')''')
+        connection_obj.commit()
+
+        # Sending a message to the user
+        await update.message.reply_text(text="/start ")
+
+    except sqlite3.Error as db_error:
+        logger.error("Database error occurred: %s", db_error)
+        await update.message.reply_text(text="An error occurred while accessing the database. Please try again later.")
+
+    except Exception as e:
+        logger.error("An unexpected error occurred: %s", e)
+        await update.message.reply_text(text="An unexpected error occurred. Please try again later.")
 
 
 async def submit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Prompt same text & keyboard as `start` does but not as new message"""
-    messsage = update.message.from_user
+    message = update.message.from_user
     extra = context.user_data.get("extra_data")
     txt = update.message.text
-    hub = cursor_obj.execute(f"SELECT HUB FROM users WHERE USER_ID = {messsage.id}").fetchone()
-    balnce = cursor_obj.execute(f"SELECT BALANCE FROM users WHERE USER_ID = {messsage.id}").fetchone()
-    price = cursor_obj.execute(f"SELECT price FROM BUTTON WHERE BUTTON_NAME = '{extra}'").fetchone()
-    price_sy = cursor_obj.execute(f"SELECT price_sy FROM sy_price").fetchone()
-    price = float(price[0]) * float(price_sy[0])
-    keyboard = [[InlineKeyboardButton("رجوع", callback_data=str(ONE))]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    if float(balnce[0]) >= price:
-        await context.bot.send_message(chat_id='-1002364237348', text=f'''عملية شحن جديدة 
-            {extra}
-            {extra}
-            plyer id : {txt}
-            first name: {messsage.first_name}
-            usernaem: {messsage.username}
-            user_id: {messsage.id}
-            hub: {hub[0]}''')
-        balnce = float(balnce[0] - price)
-        cursor_obj.execute(f"UPDATE users SET BALANCE = {balnce} WHERE USER_ID = {int(messsage.id)};")
-        connection_obj.commit()
-        await update.message.reply_text(f"لقد تم ارسال الطلب وخصم مبلغ {price} من رصيدك سوف يتم شحن حسابك في مدة اقصاها نصف ساعة",
-                                        reply_markup=reply_markup, )
 
+    try:
+        # Fetch user hub and balance
+        hub = cursor_obj.execute(f"SELECT HUB FROM users WHERE USER_ID = {message.id}").fetchone()
+        balance = cursor_obj.execute(f"SELECT BALANCE FROM users WHERE USER_ID = {message.id}").fetchone()
+        price = cursor_obj.execute(f"SELECT price FROM BUTTON WHERE BUTTON_NAME = '{extra}'").fetchone()
+        price_sy = cursor_obj.execute(f"SELECT price_sy FROM sy_price").fetchone()
 
-    else:
-        await update.message.reply_text("عذرا لاتملك رصيد كافي",
-                                        reply_markup=reply_markup, )
+        # Calculate total price
+        price = float(price[0]) * float(price_sy[0])
+
+        # Prepare keyboard for response
+        keyboard = [[InlineKeyboardButton("رجوع", callback_data=str(ONE))]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        # Check if user has sufficient balance
+        if float(balance[0]) >= price:
+            await context.bot.send_message(chat_id='-1002364237348', text=f'''عملية شحن جديدة 
+                {extra}
+                {extra}
+                player id : {txt}
+                first name: {message.first_name}
+                username: {message.username}
+                user_id: {message.id}
+                hub: {hub[0]}''')
+
+            # Update user balance
+            balance = float(balance[0] - price)
+            cursor_obj.execute(f"UPDATE users SET BALANCE = {balance} WHERE USER_ID = {int(message.id)};")
+            connection_obj.commit()
+            await update.message.reply_text(
+                f"لقد تم ارسال الطلب وخصم مبلغ {price} من رصيدك سوف يتم شحن حسابك في مدة اقصاها نصف ساعة",
+                reply_markup=reply_markup)
+        else:
+            await update.message.reply_text("عذرا لاتملك رصيد كافي",
+                                            reply_markup=reply_markup)
+
+    except Exception as e:
+        # Log the error for debugging
+        logging.error(f"An error occurred: {e}")
+        await update.message.reply_text("An unexpected error occurred. Please try again later.")
 
     return START_ROUTES
 
@@ -209,13 +257,22 @@ async def submit_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Prompt same text & keyboard as `start` does but not as new message"""
     query = update.callback_query
     context.user_data['extra_data'] = query.data
-    pricew = cursor_obj.execute(f"SELECT price FROM BUTTON WHERE BUTTON_NAME = '{query.data}'").fetchone()
-    pricewt = cursor_obj.execute(f"SELECT price_sy FROM sy_price").fetchone()
-    total = float(pricew[0]*float(pricewt[0]))
-    keyboard = [[InlineKeyboardButton("رجوع", callback_data=str(ONE))]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(f"سعر هذه الخدمة {total} من اجل اكمال العملية ارسل id المراد شحنه",reply_markup=reply_markup)
-    return PUBG_ROUTE
+    try:
+        pricew = cursor_obj.execute(f"SELECT price FROM BUTTON WHERE BUTTON_NAME = '{query.data}'").fetchone()
+        pricewt = cursor_obj.execute(f"SELECT price_sy FROM sy_price").fetchone()
+        total = float(pricew[0] * float(pricewt[0]))
+        keyboard = [[InlineKeyboardButton("رجوع", callback_data=str(ONE))]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(f"سعر هذه الخدمة {total} من اجل اكمال العملية ارسل id المراد شحنه",
+                                      reply_markup=reply_markup)
+        return PUBG_ROUTE
+
+    except Exception as e:
+        logging.error(f"An error occurred: {e}")
+        await update.message.reply_text("An unexpected error occurred. Please try again later.")
+        return START_ROUTES
+
+
 
 
 async def submit_W(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -232,11 +289,11 @@ async def s_submit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Prompt same text & keyboard as `start` does but not as new message"""
     message = update.message.text
     user = update.message.from_user
-    hub = cursor_obj.execute(f"SELECT HUB FROM users WHERE USER_ID = {user.id}").fetchone()
     keyboard = [[InlineKeyboardButton("رجوع", callback_data=str(ONE))]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     try:
-        await context.bot.send_message(chat_id='-1002152211375', text=f'''عملية شحن جديدة 
+        hub = cursor_obj.execute(f"SELECT HUB FROM users WHERE USER_ID = {user.id}").fetchone()
+        await context.bot.send_message(chat_id='-1002364237348', text=f'''عملية شحن جديدة 
     {message}
     %%%%%%%
     first name: {user.first_name}
@@ -244,14 +301,17 @@ async def s_submit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id: {user.id}
     hub: {hub[0]}''')
         await update.message.reply_text("لقد تم ارسال الطلب سوف يتم شحن حسابك في مدة اقصاها نصف ساعة",reply_markup=reply_markup)
-    except:
-        await update.message.reply_text("عذرا اعد المحاولة",reply_markup=reply_markup)
+
+    except Exception as e:
+        logging.error(f"An error occurred: {e}")
+        await update.message.reply_text(f"عذرا اعد المحاولة", reply_markup=reply_markup)
+
     return START_ROUTES
 
 
 
 def main() -> None:
-    application = Application.builder().token("7411899807:AAFkj7LY7r-16w1LDX9WwRxMFFqlWEyvttY").build()
+    application = Application.builder().token(token).build()
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={

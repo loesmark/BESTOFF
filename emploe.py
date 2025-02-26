@@ -11,7 +11,10 @@ from telegram.ext import (
 )
 import requests
 import sqlite3
+import os
 
+token = os.getenv('bot_token_1')
+token_2 = os.getenv('bot_token_2')
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
@@ -22,7 +25,6 @@ START_ROUTES, add_button_route_2, OPTION_ROUTE, charge_ROUTE2, charge_ROUTE = ra
 ALL_MESSAGE_ROUTE,add_button_route,rimove_admin_ROUTE, add_button_route_3 = range(5, 9)
 SPICIFIC_MESSAGE_ROUTE, SPICIFIC_MESSAGE_ROUTE2, SUBMET_TOP_ROUTE, SUBMET_TOP_ROUTE_2, submet_pop_ROUTE= range(9, 14)
 ONE, TWO, THREE, FOUR, FIVE, SIX, SEVEN, EIGHT = range(8)
-BOT_TOKEN = "7411899807:AAFkj7LY7r-16w1LDX9WwRxMFFqlWEyvttY"
 
 connection_obj = sqlite3.connect('geek.db')
 cursor_obj = connection_obj.cursor()
@@ -93,40 +95,39 @@ async def submet_top_InFO(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def submet_top_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    typee = context.user_data.get('type')
-    if typee == "submet ok":
+    try:
+        typee = context.user_data.get('type')
         message = update.message.text
+        id = context.user_data.get('extra_data')
 
-        id = context.user_data.get('extra_data')
-        URL = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'
+        if not id:
+            await update.message.reply_text("Error: No chat ID found. Please try again.")
+            return START_ROUTES
+
+        URL = f'https://api.telegram.org/bot{token_2}/sendMessage'
         payload = {
             'chat_id': str(id),
-            'text': f"تم شحن الاعب {message}"
+            'text': f"تم شحن الاعب {message}" if typee == "submet ok" else f"عذرا لم تنجح عملية الشحن الخاصة ب اللاعب {message}"
         }
-        # إرسال الطلب إلى API
+
+        # Sending the request to the API
         response = requests.post(URL, data=payload)
-        # التحقق من نجاح الطلب
-        if response.status_code == 200:
-            await update.message.reply_text("تم اعلام الزبون بنجاح /start")
-        else:
-            await update.message.reply_text("حدث خطاء اعد المحاولة /start")
-        return START_ROUTES
-    else:
-        message = update.message.text
-        id = context.user_data.get('extra_data')
-        URL = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'
-        payload = {
-            'chat_id': str(id),
-            'text': f"عذرا لم تنجح عملية الشحن الخاصة ب اللاعب{message}"
-        }
-        # إرسال الطلب إلى API
-        response = requests.post(URL, data=payload)
-        # التحقق من نجاح الطلب
-        if response.status_code == 200:
-            await update.message.reply_text("تم اعلام الزبون بنجاح /start")
-        else:
-            await update.message.reply_text("حدث خطاء /start")
-        return START_ROUTES
+
+        # Check for successful request
+        response.raise_for_status()  # Raises an HTTPError for bad responses (4xx or 5xx)
+
+        await update.message.reply_text("تم اعلام الزبون بنجاح /start")
+    except requests.exceptions.HTTPError as http_err:
+        logger.error(f"HTTP error occurred: {http_err}")
+        await update.message.reply_text("حدث خطاء في الاتصال بالخادم. حاول مرة اخرى /start")
+    except requests.exceptions.RequestException as req_err:
+        logger.error(f"Request error occurred: {req_err}")
+        await update.message.reply_text("حدث خطاء في الطلب. حاول مرة اخرى /start")
+    except Exception as e:
+        logger.error(f"An unexpected error occurred: {e}")
+        await update.message.reply_text("حدث خطاء غير متوقع. حاول مرة اخرى /start")
+
+    return START_ROUTES
 
 
 async def all_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -140,18 +141,31 @@ async def all_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 
 async def all_message_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     message = update.message.text
-    user = cursor_obj.execute(f"SELECT USER_ID FROM users").fetchall()
-    URL = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'
+    try:
+        # Fetch user IDs from the database
+        user = cursor_obj.execute("SELECT USER_ID FROM users").fetchall()
+    except Exception as e:
+        logger.error(f"Database error: {e}")
+        await update.message.reply_text("An error occurred while accessing the database. Please try again later.")
+        return START_ROUTES
+
+    URL = f'https://api.telegram.org/bot{token_2}/sendMessage'
+
     for i in user:
         payload = {
             'chat_id': str(i[0]),
             'text': message
         }
-        # إرسال الطلب إلى API
-        requests.post(URL, data=payload)
+        try:
+            # Send the request to the Telegram API
+            response = requests.post(URL, data=payload)
+            response.raise_for_status()  # Raise an error for bad responses
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Request error for user {i[0]}: {e}")
+            await update.message.reply_text(f"Failed to send message to user {i[0]}.")
+            continue  # Skip to the next user
 
-    await update.message.reply_text("تم الارسال اضغط /start")
-
+    await update.message.reply_text("Message sent successfully to all users.")
     return START_ROUTES
 
 
@@ -175,18 +189,22 @@ async def spicefick_message_id(update: Update, context: ContextTypes.DEFAULT_TYP
 async def spicefick_message_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     id = update.message.text
     message = context.user_data.get("message")
-    URL = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'
+    URL = f'https://api.telegram.org/bot{token_2}/sendMessage'
     payload = {
         'chat_id': str(id),
         'text': message
     }
-    # إرسال الطلب إلى API
-    response = requests.post(URL, data=payload)
-    # التحقق من نجاح الطلب
-    if response.status_code == 200:
+
+    try:
+        response = requests.post(URL, data=payload)
+        response.raise_for_status()  # Raises an HTTPError for bad responses
         await update.message.reply_text("تم اعلام الزبون بنجاح /start")
-    else:
-        await update.message.reply_text("حدث خطاء اعد المحاولة /start")
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"HTTP error occurred: {e}")
+        await update.message.reply_text("Failed to notify the user. Please check the user ID and try again.")
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        await update.message.reply_text("An unexpected error occurred while notifying the user.")
 
     return SPICIFIC_MESSAGE_ROUTE2
 
@@ -210,67 +228,67 @@ async def charge_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 async def charge_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     typee = context.user_data.get("type")
-    if typee == "hubb":
-        id = update.message.text
-        balncee = context.user_data.get("message")
-        old_bal = cursor_obj.execute(f"SELECT BALANCE FROM USER_HUB WHERE USER_ID = {int(id)};").fetchone()
-        try:
-            balnce =float(balncee) + float(old_bal[0])
-        except:
-            await update.message.reply_text("erorr /start")
+    id = update.message.text
+    balncee = context.user_data.get("message")
+
+    try:
+        # Fetch the old balance
+        if typee == "hubb":
+            old_bal = cursor_obj.execute(f"SELECT BALANCE FROM USER_HUB WHERE USER_ID = {int(id)};").fetchone()
+        else:
+            old_bal = cursor_obj.execute(f"SELECT BALANCE FROM users WHERE USER_ID = {int(id)};").fetchone()
+
+        # Check if old balance is None
+        if old_bal is None:
+            await update.message.reply_text("User not found. Please try again /start")
             return START_ROUTES
 
-        cursor_obj.execute(f"UPDATE USER_HUB SET BALANCE = {float(balnce)} WHERE USER_ID = {int(id)};")
-        updated_rows = cursor_obj.rowcount
-        if updated_rows == 1:
-            await update.message.reply_text("تم شحن الزبون بنجاح /start")
-            connection_obj.commit()
-            URL = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'
-            payload = {
-                'chat_id': str(id),
-                'text': f"تم اضافة مبلغ كموزع {balncee} الى رصيدك واصبح {balnce}"
-            }
-            # إرسال الطلب إلى API
-            response = requests.post(URL, data=payload)
-            # التحقق من نجاح الطلب
-            if response.status_code == 200:
-                await update.message.reply_text("تم اعلام الزبون بنجاح /start")
-            else:
-                await update.message.reply_text("حدث خطاء اثناء اعلام الزبون start/")
-        else:
-            await update.message.reply_text("حدث خطاء اعد المحاولة /start")
-
-    else:
-        id = update.message.text
-        balncee = context.user_data.get("message")
-        old_bal = cursor_obj.execute(f"SELECT BALANCE FROM users WHERE USER_ID = {int(id)};").fetchone()
+        # Calculate new balance
         try:
-            balnce =float(balncee) + float(old_bal[0])
-        except:
-            await update.message.reply_text("erorr /start")
+            balnce = float(balncee) + float(old_bal[0])
+        except ValueError as ve:
+            logging.error(f"ValueError: {ve}")
+            await update.message.reply_text("Error: Invalid balance input. Please start over /start")
             return START_ROUTES
 
-        cursor_obj.execute(f"UPDATE users SET BALANCE = {float(balnce)} WHERE USER_ID = {int(id)};")
+        # Update the balance in the database
+        if typee == "hubb":
+            cursor_obj.execute(f"UPDATE USER_HUB SET BALANCE = {float(balnce)} WHERE USER_ID = {int(id)};")
+        else:
+            cursor_obj.execute(f"UPDATE users SET BALANCE = {float(balnce)} WHERE USER_ID = {int(id)};")
+
         updated_rows = cursor_obj.rowcount
         if updated_rows == 1:
-            await update.message.reply_text("تم شحن الزبون بنجاح /start")
+            await update.message.reply_text("Customer charged successfully /start")
             connection_obj.commit()
-            URL = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'
-            payload = {
-                'chat_id': str(id),
-                'text': f"تم اضافة مبلغ {balncee} الى رصيدك واصبح {balnce}"
-            }
-            # إرسال الطلب إلى API
-            response = requests.post(URL, data=payload)
-            # التحقق من نجاح الطلب
-            if response.status_code == 200:
-                await update.message.reply_text("تم اعلام الزبون بنجاح /start")
-            else:
-                await update.message.reply_text("حدث خطاء اثناء اعلام الزبون /start")
+            x = await notify_user(id, balncee, balnce)
+            await update.message.reply_text( "تم اعلام الزبون" if x == 0 else "لم يتم اعلام الزبون"
+)
+
         else:
-            await update.message.reply_text("حدث خطاء اعد المحاولة /start")
+            await update.message.reply_text("Error: Update failed. Please try again /start")
+
+    except sqlite3.Error as db_error:
+        logging.error(f"Database error: {db_error}")
+        await update.message.reply_text("Error: Database operation failed. Please try again /start")
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}")
+        await update.message.reply_text("An unexpected error occurred. Please try again /start")
 
     return START_ROUTES
+
+async def notify_user(user_id: str, balncee: str, balnce: float):
+    URL = f'https://api.telegram.org/bot{token_2}/sendMessage'
+    payload = {
+        'chat_id': str(user_id),
+        'text': f"Added amount {balncee} to your balance. New balance is {balnce}"
+    }
+    response = requests.post(URL, data=payload)
+    if response.status_code == 200:
+        return 0
+    else:
+        logging.error(f"Failed to notify user: {response.status_code} - {response.text}")
+        return 1
 
 
 async def option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -300,118 +318,103 @@ async def add_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     x = query.data
     context.user_data["what"] = x
     await query.answer()
-    if x == 0:
-        await query.edit_message_text(text="ارسل اسم الزر")
 
-    elif int(x) == 1:
-        await query.edit_message_text(text="ارسل الزر المراد حذفه")
+    try:
+        # Attempt to convert x to an integer
+        x_int = int(x)
 
-    elif int(x) == 2:
-        await query.edit_message_text(text="ارسل الزر المراد تفعيل")
+        if x_int == 0:
+            await query.edit_message_text(text="ارسل اسم الزر")
+        elif x_int == 1:
+            await query.edit_message_text(text="ارسل الزر المراد حذفه")
+        elif x_int == 2:
+            await query.edit_message_text(text="ارسل الزر المراد تفعيل")
+        elif x_int == 3:
+            await query.edit_message_text(text="ارسل الزر المراد الغاء تفعيله")
+        elif x_int == 4:
+            await query.edit_message_text(text="ارسل id الموزع للاضافة")
+        elif x_int == 5:
+            await query.edit_message_text(text="ارسل id الموزع للحذف")
+        elif x_int == 6:
+            await query.edit_message_text(text="ارسل id الادمن")
+        elif x_int == 7:
+            await query.edit_message_text(text="ارسل السعر")
+        else:
+            await query.edit_message_text(text="Invalid option selected.")
 
-    elif int(x) == 3:
-        await query.edit_message_text(text="ارسل الزر المراد الغاء تفعيله")
-
-    elif int(x) == 4:
-        await query.edit_message_text(text="ارسل id الموزع للاضافة")
-
-    elif int(x) == 5:
-        await query.edit_message_text(text="ارسل id الموزع للحذف")
-
-    elif int(x) == 6:
-        await query.edit_message_text(text="ارسل id الادمن")
-    elif int(x) == 7:
-        await query.edit_message_text(text="ارسل السعر")
+    except ValueError:
+        # Handle the case where x cannot be converted to an integer
+        await query.edit_message_text(text="Error: Invalid input. Please select a valid option.")
+    except Exception as e:
+        # Handle any other exceptions
+        await query.edit_message_text(text=f"An unexpected error occurred: {str(e)}")
 
     return add_button_route
-
-
-
 
 
 async def add_button_TYPE(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Prompt same text & keyboard as `start` does but not as new message"""
     typee = context.user_data.get("what")
-    print("asd")
-    if int(typee) == 0:
-        context.user_data["name"] = update.message.text
-        await update.message.reply_text(text="ارسل القيمة الزر")
-        return add_button_route_2
-    elif int(typee) == 1:
-        x = update.message.text
-        cursor_obj.execute(f'DELETE FROM BUTTON WHERE BUTTON_NAME ={x} ;')
-        updated_rows = cursor_obj.rowcount
-        if updated_rows == 1:
-            connection_obj.commit()
-            await update.message.reply_text(text="ok dn START/")
+
+    try:
+        if typee is None:
+            await update.message.reply_text(text="Error: No action specified.")
             return START_ROUTES
 
-        await update.message.reply_text(text="erorr  START/")
-    elif int(typee) == 2:
+        typee = int(typee)  # Validate typee is an integer
         x = update.message.text
-        cursor_obj.execute(f"UPDATE BUTTON SET STATE = 1 WHERE BUTTON_NAME = '{x}';")
-        updated_rows = cursor_obj.rowcount
-        if updated_rows == 1:
-            connection_obj.commit()
-            await update.message.reply_text(text="ok START/")
-            return START_ROUTES
 
-        await update.message.reply_text(text="eroor START/")
-    elif int(typee) == 3:
-        x = update.message.text
-        cursor_obj.execute(f"UPDATE BUTTON SET STATE = 0 WHERE BUTTON_NAME = '{x}';")
-        updated_rows = cursor_obj.rowcount
-        if updated_rows == 1:
-            connection_obj.commit()
-            await update.message.reply_text(text="ok START/")
-            return START_ROUTES
+        if typee == 0:
+            context.user_data["name"] = x
+            await update.message.reply_text(text="Please send the button value.")
+            return add_button_route_2
 
-        await update.message.reply_text(text="eroor START/")
+        elif typee in [1, 2, 3, 5, 6, 7]:
+            # Common operation for delete/update
+            if typee == 1:
+                cursor_obj.execute(f'DELETE FROM BUTTON WHERE BUTTON_NAME ={x} ;')
+            elif typee == 2:
+                cursor_obj.execute(f"UPDATE BUTTON SET STATE = 1 WHERE BUTTON_NAME = '{x}';")
+            elif typee == 3:
+                cursor_obj.execute(f"UPDATE BUTTON SET STATE = 0 WHERE BUTTON_NAME = '{x}';")
+            elif typee == 5:
+                cursor_obj.execute(f"DELETE FROM USER_HUB WHERE USER_ID ={int(x)} ")
+            elif typee == 6:
+                cursor_obj.execute(f"UPDATE users SET HUB = 'admin' WHERE USER_ID = '{int(x)}';")
+            elif typee == 7:
+                cursor_obj.execute(f"UPDATE sy_price SET price_sy = {int(x)};")
 
-    elif int(typee) == 4:
-        x = update.message.text
-        button = cursor_obj.execute(f"SELECT * FROM users WHERE USER_ID = {int(x)} ").fetchone()
-        cursor_obj.execute(f'''INSERT INTO USER_HUB(USER_NAME, First_Name, USER_ID,BALANCE) 
-            VALUES ('{str(button[0])}',' {str(button[1])}',{int(button[2])},0)''')
-        updated_rows = cursor_obj.rowcount
-        if updated_rows == 1:
-            connection_obj.commit()
-            await update.message.reply_text(text="ok START/")
-            return START_ROUTES
+            updated_rows = cursor_obj.rowcount
+            if updated_rows == 1:
+                connection_obj.commit()
+                await update.message.reply_text(text="Operation successful.")
+            else:
+                await update.message.reply_text(text="Error: No rows affected.")
 
-        await update.message.reply_text(text="eroor START/")
+        elif typee == 4:
+            button = cursor_obj.execute(f"SELECT * FROM users WHERE USER_ID = {int(x)};").fetchone()
+            if button:
+                cursor_obj.execute(f'''INSERT INTO USER_HUB(USER_NAME, First_Name, USER_ID, BALANCE) 
+                    VALUES ({str(button[0])}, {str(button[1])}, {int(button[2])}, 0)''')
+                updated_rows = cursor_obj.rowcount
+                if updated_rows == 1:
+                    connection_obj.commit()
+                    await update.message.reply_text(text="User added successfully.")
+                else:
+                    await update.message.reply_text(text="Error: User not added.")
+            else:
+                await update.message.reply_text(text="Error: User not found.")
 
-    elif int(typee) == 5:
-        x = update.message.text
-        cursor_obj.execute(f"DELETE FROM USER_HUB WHERE USER_ID ={int(x)} ")
-        updated_rows = cursor_obj.rowcount
-        if updated_rows == 1:
-            connection_obj.commit()
-            await update.message.reply_text(text="ok START/")
-            return START_ROUTES
+        else:
+            await update.message.reply_text(text="Error: Invalid action type.")
 
-        await update.message.reply_text(text="eroor START/")
-    elif int(typee) == 6:
-        x = update.message.text
-        cursor_obj.execute(f"UPDATE users SET HUB = 'admin' WHERE USER_ID = '{int(x)}';")
-        updated_rows = cursor_obj.rowcount
-        if updated_rows == 1:
-            connection_obj.commit()
-            await update.message.reply_text(text="ok START/")
-            return START_ROUTES
-        await update.message.reply_text(text="eroor START/")
-    elif int(typee) == 7:
-        x = update.message.text
-        cursor_obj.execute(f"UPDATE sy_price SET price_sy = {int(x)};")
-        updated_rows = cursor_obj.rowcount
-        if updated_rows == 1:
-            connection_obj.commit()
-            await update.message.reply_text(text="ok START/")
-            return START_ROUTES
-        await update.message.reply_text(text="eroor START/")
+    except ValueError as ve:
+        await update.message.reply_text(text=f"Input error: {str(ve)}")
+    except Exception as e:
+        await update.message.reply_text(text="An unexpected error occurred.")
+        print(f"Error: {str(e)}")  # Log the error for debugging
 
     return START_ROUTES
-
 
 
 async def add_button_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -425,8 +428,9 @@ async def add_button_DONE(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     """Prompt same text & keyboard as `start` does but not as new message"""
     Typee = update.message.text
     name = context.user_data.get("name")
+    price = context.user_data.get("price")
     cursor_obj.execute(f'''INSERT INTO BUTTON(BUTTON_NAME, BUTTON_TYPE, STATE,price) 
-            VALUES ('{str(Typee)}',' {str(name)}',1,)''')
+            VALUES ('{str(Typee)}',' {str(name)}',1,{float(price)})''')
     updated_rows = cursor_obj.rowcount
     if updated_rows == 1:
         connection_obj.commit()
@@ -455,8 +459,25 @@ async def rimove_admin_done(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return START_ROUTES
 
 
+async def databasecopy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    chat_id = update.effective_chat.id
+    file_path = 'geek.db'  # Update this path to your database file
+
+    try:
+        # Send the database file
+        await context.bot.send_document(chat_id=chat_id, document=open(file_path, 'rb'))
+        await update.message.reply_text("Database file has been sent successfully.")
+    except Exception as e:
+        logging.error(f"Error occurred: {e}")
+        await update.message.reply_text("Failed to send the database file.")
+
+    return START_ROUTES
+
+
+
+
 def main() -> None:
-    application = Application.builder().token("7233560953:AAFkQ-KRoRNjz8O93U4hVlF57b6XioZLl6w").build()
+    application = Application.builder().token(token).build()
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
@@ -501,9 +522,9 @@ def main() -> None:
                 CallbackQueryHandler(add_button, pattern="^" + str(SEVEN) + "$"),
                 CallbackQueryHandler(add_button, pattern="^" + str(EIGHT) + "$"),
                 MessageHandler(filters.Regex("^(super)"), rimove_admin),
+                MessageHandler(filters.Regex("^(dtatbasecopy)"), databasecopy),
             ],
-            add_button_route: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, add_button_TYPE),
+            add_button_route: [                MessageHandler(filters.TEXT & ~filters.COMMAND, add_button_TYPE),
             ],
             add_button_route_2: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, add_button_price),
