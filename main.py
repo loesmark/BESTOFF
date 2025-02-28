@@ -11,16 +11,8 @@ from telegram.ext import (
 )
 import sqlite3
 import os
-from flask import Flask
-import os
-
-app = Flask(__name__)
-
-
-@app.route('/')
-def home():
-    return "Hello, Render!"
-
+import emploe
+import HUB
 
 token = os.getenv('bot_token')
 
@@ -364,9 +356,94 @@ def main() -> None:
         },
         fallbacks=[CommandHandler("start", start)],
     )
+    conv_handler_HUB = ConversationHandler(
+        entry_points=[CommandHandler("start_HUB", HUB.start)],
+        states={
+            HUB.START_ROUTES: [
+                CallbackQueryHandler(HUB.spicefick_message, pattern="^" + str(ONE) + "$"),
+                CallbackQueryHandler(HUB.charge, pattern="^" + str(TWO) + "$"),
+            ],
+            HUB.SPICIFIC_MESSAGE_ROUTE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, HUB.spicefick_message_id),
+            ],
+            HUB.SPICIFIC_MESSAGE_ROUTE2: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, HUB.spicefick_message_done),
+            ],
+            HUB.charge_ROUTE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, HUB.charge_id),
+            ],
+            HUB.charge_ROUTE2: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, HUB.charge_done),
+            ],
+        },
+        fallbacks=[CommandHandler("start_HUB", HUB.start)],
+    )
+    conv_handler_emp = ConversationHandler(
+        entry_points=[CommandHandler("start_admin", emploe.start)],
+        states={
+            START_ROUTES: [
+                CallbackQueryHandler(emploe.submet_top, pattern="^(submet)"),
+                CallbackQueryHandler(emploe.submet_top, pattern="^(submet)"),
+                CallbackQueryHandler(emploe.spicefick_message, pattern="^" + str(THREE) + "$"),
+                CallbackQueryHandler(emploe.all_message, pattern="^" + str(FOUR) + "$"),
+                CallbackQueryHandler(emploe.charge, pattern="^(hub)"),
+                CallbackQueryHandler(emploe.charge, pattern="^(user)"),
+                CallbackQueryHandler(emploe.option, pattern="^" + str(emploe.SEVEN) + "$")
+            ],
+            emploe.SUBMET_TOP_ROUTE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, emploe.submet_top_InFO),
+            ],
+            emploe.SUBMET_TOP_ROUTE_2: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, emploe.submet_top_done),
+            ],
+
+            emploe.ALL_MESSAGE_ROUTE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, emploe.all_message_done),
+            ],
+            emploe.SPICIFIC_MESSAGE_ROUTE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, emploe.spicefick_message_id),
+            ],
+            emploe.SPICIFIC_MESSAGE_ROUTE2: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, emploe.spicefick_message_done),
+            ],
+            emploe.charge_ROUTE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, emploe.charge_id),
+            ],
+            emploe.charge_ROUTE2: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, emploe.charge_done),
+            ],
+            emploe.OPTION_ROUTE: [
+                CallbackQueryHandler(emploe.add_button, pattern="^" + str(ONE) + "$"),
+                CallbackQueryHandler(emploe.add_button, pattern="^" + str(TWO) + "$"),
+                CallbackQueryHandler(emploe.add_button, pattern="^" + str(THREE) + "$"),
+                CallbackQueryHandler(emploe.add_button, pattern="^" + str(FOUR) + "$"),
+                CallbackQueryHandler(emploe.add_button, pattern="^" + str(emploe.FIVE) + "$"),
+                CallbackQueryHandler(emploe.add_button, pattern="^" + str(emploe.SIX) + "$"),
+                CallbackQueryHandler(emploe.add_button, pattern="^" + str(emploe.SEVEN) + "$"),
+                CallbackQueryHandler(emploe.add_button, pattern="^" + str(emploe.EIGHT) + "$"),
+                MessageHandler(filters.Regex("^(super)"), emploe.rimove_admin),
+                MessageHandler(filters.Regex("^(dtatbasecopy)"), emploe.databasecopy),
+            ],
+            emploe.add_button_route: [MessageHandler(filters.TEXT & ~filters.COMMAND, emploe.add_button_TYPE),
+                               ],
+            emploe.add_button_route_2: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, emploe.add_button_price),
+            ],
+            emploe.add_button_route_3: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, emploe.add_button_DONE),
+            ],
+            emploe.rimove_admin_ROUTE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, emploe.rimove_admin_done),
+            ],
+        },
+        fallbacks=[CommandHandler("start_admin", emploe.start)],
+    )
 
     # Add ConversationHandler to application that will be used for handling updates
     application.add_handler(conv_handler)
+    application.add_handler(conv_handler_HUB)
+    application.add_handler(conv_handler_emp)
+
 
     # Run the bot until the user presses Ctrl-C
     application.run_polling(allowed_updates=Update.ALL_TYPES)
@@ -375,8 +452,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 5000))  # Default to 5000 if PORT is not set
-    app.run(host='0.0.0.0', port=port)
+
     main()
 
 
