@@ -312,6 +312,7 @@ async def s_submit(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def main() -> None:
+    port = int(os.environ.get('PORT', '8443'))
     application = Application.builder().token(token).build()
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
@@ -445,7 +446,7 @@ def main() -> None:
 
 
     # Run the bot until the user presses Ctrl-C
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    application.run_polling(allowed_updates=Update.ALL_TYPES, port=port)
 
 
 
