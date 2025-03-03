@@ -1,20 +1,11 @@
 import logging
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import (
-    Application,
-    CallbackQueryHandler,
-    CommandHandler,
-    ContextTypes,
-    ConversationHandler,
-    MessageHandler,
-    filters,
-)
+from telegram.ext import ContextTypes
 import requests
 import sqlite3
 import os
 
-token = os.getenv('bot_token_1')
-token_2 = os.getenv('bot_token_2')
+token_2 = os.getenv('bot_token')
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
@@ -473,77 +464,3 @@ async def databasecopy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
     return START_ROUTES
 
-
-
-
-def main() -> None:
-    application = Application.builder().token(token).build()
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
-        states={
-            START_ROUTES: [
-                CallbackQueryHandler(submet_top, pattern="^(submet)"),
-                CallbackQueryHandler(submet_top, pattern="^(submet)"),
-                CallbackQueryHandler(spicefick_message, pattern="^" + str(THREE) + "$"),
-                CallbackQueryHandler(all_message, pattern="^" + str(FOUR) + "$"),
-                CallbackQueryHandler(charge, pattern="^(hub)"),
-                CallbackQueryHandler(charge, pattern="^(user)"),
-                CallbackQueryHandler(option, pattern="^" + str(SEVEN) + "$")
-            ],
-            SUBMET_TOP_ROUTE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, submet_top_InFO),
-            ],
-            SUBMET_TOP_ROUTE_2: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, submet_top_done),
-            ],
-
-            ALL_MESSAGE_ROUTE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, all_message_done),
-            ],
-            SPICIFIC_MESSAGE_ROUTE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, spicefick_message_id),
-            ],
-            SPICIFIC_MESSAGE_ROUTE2: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, spicefick_message_done),
-            ],
-            charge_ROUTE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, charge_id),
-            ],
-            charge_ROUTE2: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, charge_done),
-            ],
-            OPTION_ROUTE: [
-                CallbackQueryHandler(add_button, pattern="^" + str(ONE) + "$"),
-                CallbackQueryHandler(add_button, pattern="^" + str(TWO) + "$"),
-                CallbackQueryHandler(add_button, pattern="^" + str(THREE) + "$"),
-                CallbackQueryHandler(add_button, pattern="^" + str(FOUR) + "$"),
-                CallbackQueryHandler(add_button, pattern="^" + str(FIVE) + "$"),
-                CallbackQueryHandler(add_button, pattern="^" + str(SIX) + "$"),
-                CallbackQueryHandler(add_button, pattern="^" + str(SEVEN) + "$"),
-                CallbackQueryHandler(add_button, pattern="^" + str(EIGHT) + "$"),
-                MessageHandler(filters.Regex("^(super)"), rimove_admin),
-                MessageHandler(filters.Regex("^(dtatbasecopy)"), databasecopy),
-            ],
-            add_button_route: [                MessageHandler(filters.TEXT & ~filters.COMMAND, add_button_TYPE),
-            ],
-            add_button_route_2: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, add_button_price),
-            ],
-            add_button_route_3: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, add_button_DONE),
-            ],
-            rimove_admin_ROUTE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, rimove_admin_done),
-            ],
-        },
-        fallbacks=[CommandHandler("start", start)],
-    )
-
-    # Add ConversationHandler to application that will be used for handling updates
-    application.add_handler(conv_handler)
-    # Run the bot until the user presses Ctrl-C
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
-
-
-if __name__ == "__main__":
-    main()

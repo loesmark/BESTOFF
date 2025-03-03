@@ -13,10 +13,16 @@ import sqlite3
 import os
 import emploe
 import HUB
+from flask import Flask
 
+
+app = Flask(__name__)
+
+
+@app.route('/')
+def home():
+    return "Hello, Render!"
 token = os.getenv('bot_token')
-
-
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
@@ -452,9 +458,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-
+    port = int(os.environ.get('PORT', 5000))  # Default to 5000 if PORT is not set
+    app.run(host='0.0.0.0', port=port)
     main()
-
-
-
-
